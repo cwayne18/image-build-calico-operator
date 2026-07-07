@@ -7,7 +7,7 @@ FROM --platform=$BUILDPLATFORM rancher/mirrored-tonistiigi-xx:1.6.1 AS xx
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 # copy xx scripts to the build stage
 COPY --from=xx / /
-RUN apk add --no-cache file make git clang lld
+RUN apk add --no-cache file make git clang lld curl
 ARG TARGETPLATFORM
 RUN set -x && xx-apk --no-cache add musl-dev gcc lld
 
@@ -18,6 +18,15 @@ WORKDIR $GOPATH/src/${PKG}
 RUN git fetch --all --tags --prune
 RUN git checkout tags/${TAG} -b ${TAG}
 RUN go mod download
+
+# tigera/operator embeds Istio helm charts (pkg/render/istio/*.tgz) via //go:embed.
+# These are downloaded during the upstream `make istio_charts` target; fetch them
+# here so the `./cmd` build can satisfy the embeds.
+ARG ISTIO_VERSION=1.29.2
+RUN for c in base istiod cni ztunnel; do \
+        curl -fsSL -o pkg/render/istio/$c.tgz \
+        https://istio-release.storage.googleapis.com/charts/$c-${ISTIO_VERSION}.tgz; \
+    done
 
 # cross-compilation setup
 ARG TARGETARCH
